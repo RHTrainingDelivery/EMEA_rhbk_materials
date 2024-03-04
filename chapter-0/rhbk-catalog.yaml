@@ -1,0 +1,10 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: rh-ws-rhbk
+  namespace: openshift-marketplace
+spec:
+  displayName: RHBK Catalog
+  image: quay.io/aletia/rh-ws-rhbk:22
+  publisher: David Martin
+  sourceType: grpc
