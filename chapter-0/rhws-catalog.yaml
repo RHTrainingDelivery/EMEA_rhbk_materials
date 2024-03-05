@@ -4,7 +4,7 @@ metadata:
   name: rh-ws-catalog
   namespace: openshift-marketplace
 spec:
-  displayName: Red Hat Workshops
-  image: quay.io/aletia/rh-ws-catalog:4.14
+  displayName: Red Hat Workshops Catalog
+  image: quay.io/aletiasolucionesit/rh-ws-catalog:v4.14
   publisher: David Martin
   sourceType: grpc
