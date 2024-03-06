@@ -1,0 +1,10 @@
+#### Secret for database access
+oc create secret generic rhbk-db-secret   --from-literal=username=rhbkdbuser   --from-literal=password=rhbkdbpassword
+
+
+#### Self-signed certificate creation
+openssl req -subj '/CN=rhbk-rhbk.apps.ocp4.example.com/O=Red Hat Build of Keycloak./C=US' -newkey rsa:2048 -nodes -keyout rhbk-key.pem -x509 -days 365 -out rhbk-cert.pem
+
+
+#### Secret for TLS certificate
+oc create secret tls rhbk-tls-secret --cert rhbk-cert.pem --key rhbk-key.pem
