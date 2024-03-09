@@ -1,0 +1,46 @@
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: Keycloak
+metadata:
+  labels:
+    app: rhbk
+  name: rhbk
+  namespace: rhbk
+spec:
+  additionalOptions:
+  - name: spi-truststore-file-file
+    value: /trustkeystores/trust.jks
+  - name: spi-truststore-file-password
+    value: redhat123
+  db:
+    database: rhbk
+    host: rhbk-db
+    passwordSecret:
+      key: password
+      name: rhbk-db-secret
+    port: 5432
+    usernameSecret:
+      key: username
+      name: rhbk-db-secret
+    vendor: postgres
+  hostname:
+    hostname: rhbk-rhbk.apps.ocp4.example.com
+  http:
+    tlsSecret: rhbk-tls-secret
+  instances: 1
+  unsupported:
+    podTemplate:
+      metadata:
+        labels:
+          app: rhbk
+      spec:
+        containers:
+        - volumeMounts:
+          - mountPath: /trustkeystores
+            name: jks-secret
+        volumes:
+        - name: jks-secret
+          secret:
+            items:
+            - key: jksTrustStore
+              path: trust.jks
+            secretName: jks-rhbk-secret

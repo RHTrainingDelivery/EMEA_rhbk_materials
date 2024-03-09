@@ -17,8 +17,8 @@ spec:
         - name: rhbk-db
           image: quay.io/aletiasolucionesit/postgresql-12:1-160
           volumeMounts:
-            - mountPath: /data
-              name: cache-volume
+            - mountPath: /var/lib/pgsql/data
+              name: db-data-volume
           env:
             - name: POSTGRESQL_PASSWORD
               value: rhbkdbpassword
@@ -26,9 +26,14 @@ spec:
               value: rhbkdbuser
             - name: POSTGRESQL_DATABASE
               value: rhbk
-      volumes:
-        - name: cache-volume
-          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: db-data-volume
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 5Gi
 ---
 apiVersion: v1
 kind: Service
