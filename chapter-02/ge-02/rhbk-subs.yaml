@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: rhbk-operator
+  namespace: rhbk
+spec:
+  channel: training
+  installPlanApproval: Automatic
+  name: rhbk-operator
+  source: rh-ws-catalog
+  sourceNamespace: openshift-marketplace
