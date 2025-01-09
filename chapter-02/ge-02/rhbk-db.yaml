@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: rhbk-db
-          image: quay.io/aletiasolucionesit/postgresql-12:1-160
+          image: quay.io/aletiasolucionesit/postgresql-15
           volumeMounts:
             - mountPath: /var/lib/pgsql/data
               name: db-data-volume
