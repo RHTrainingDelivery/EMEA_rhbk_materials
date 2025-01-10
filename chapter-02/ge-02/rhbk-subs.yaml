@@ -5,7 +5,8 @@ metadata:
   namespace: rhbk
 spec:
   channel: training
-  installPlanApproval: Automatic
+  installPlanApproval: Manual
   name: rhbk-operator
   source: rh-ws-catalog
   sourceNamespace: openshift-marketplace
+  startingCSV: rhbk-operator.v24.0.5-opr.1
