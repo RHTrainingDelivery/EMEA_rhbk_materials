@@ -657,7 +657,7 @@
       "firstBrokerLoginFlowAlias": "first broker login",
       "config": {
         "baseUrl": "https://api.ocp4.example.com:6443",
-        "clientSecret": "**********",
+        "clientSecret": "redhat123",
         "clientId": "ocp4-broker"
       }
     }
