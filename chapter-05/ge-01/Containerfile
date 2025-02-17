@@ -1,4 +1,4 @@
-FROM quay.io/aletiasolucionesit/keycloak-rhel9:v26
+FROM quay.io/aletiasolucionesit/keycloak-rhel9:v26 as builder
 
 # Configure a database vendor
 ENV KC_DB=postgres
