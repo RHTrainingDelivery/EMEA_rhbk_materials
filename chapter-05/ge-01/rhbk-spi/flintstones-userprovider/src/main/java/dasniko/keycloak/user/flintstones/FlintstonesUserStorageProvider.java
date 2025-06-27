@@ -7,21 +7,23 @@ import org.keycloak.component.ComponentModel;
 import org.keycloak.credential.CredentialInput;
 import org.keycloak.credential.CredentialInputUpdater;
 import org.keycloak.credential.CredentialInputValidator;
+import org.keycloak.credential.CredentialModel;
 import org.keycloak.models.GroupModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.ModelException;
-import org.keycloak.models.PasswordPolicy;
 import org.keycloak.models.RealmModel;
+import org.keycloak.models.RoleModel;
 import org.keycloak.models.UserCredentialModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.credential.PasswordCredentialModel;
-import org.keycloak.policy.PasswordPolicyProvider;
+import org.keycloak.policy.PasswordPolicyManagerProvider;
 import org.keycloak.policy.PolicyError;
 import org.keycloak.storage.StorageId;
 import org.keycloak.storage.UserStorageProvider;
 import org.keycloak.storage.user.UserLookupProvider;
 import org.keycloak.storage.user.UserQueryProvider;
 import org.keycloak.storage.user.UserRegistrationProvider;
+import org.keycloak.tracing.TracingProvider;
 
 import java.util.List;
 import java.util.Map;
@@ -62,8 +64,14 @@ public class FlintstonesUserStorageProvider implements UserStorageProvider,
 		if (!supportsCredentialType(input.getType()) || !(input instanceof UserCredentialModel cred)) {
 			return false;
 		}
+
+		TracingProvider tracing = session.getProvider(TracingProvider.class);
+		tracing.startSpan(FlintstonesUserStorageProvider.class, "isValid");
+
 		Credential credential = new Credential("password", cred.getChallengeResponse());
-		return apiClient.verifyCredentials(StorageId.externalId(user.getId()), credential);
+		boolean isValid = apiClient.verifyCredentials(StorageId.externalId(user.getId()), credential);
+		tracing.endSpan();
+		return isValid;
 	}
 
 	@Override
@@ -72,23 +80,38 @@ public class FlintstonesUserStorageProvider implements UserStorageProvider,
 			return false;
 		}
 
+		if (!isWritable()) {
+			log.warn("Edit mode is read-only. Skipping credential update for user.");
+			return false;
+		}
+
+		TracingProvider tracing = session.getProvider(TracingProvider.class);
+		tracing.startSpan(FlintstonesUserStorageProvider.class, "updateCredential");
+
 		if (usePasswordPolicy()) {
-			PasswordPolicy passwordPolicy = realm.getPasswordPolicy();
-			if (passwordPolicy != null) {
-				for (String policy : passwordPolicy.getPolicies()) {
-					PasswordPolicyProvider provider = session.getProvider(PasswordPolicyProvider.class, policy);
-					if (provider != null) {
-						PolicyError policyError = provider.validate(user.getUsername(), cred.getChallengeResponse());
-						if (policyError != null) {
-							throw new ModelException(policyError.getMessage(), policyError.getParameters());
-						}
-					}
-				}
+			PolicyError policyError = session.getProvider(PasswordPolicyManagerProvider.class)
+				.validate(realm, user, cred.getChallengeResponse());
+			if (policyError != null) {
+				ModelException exception = new ModelException(policyError.getMessage(), policyError.getParameters());
+				tracing.error(exception);
+				tracing.endSpan();
+				throw exception;
 			}
 		}
 
 		Credential credential = new Credential("password", cred.getChallengeResponse());
-		return apiClient.updateCredentials(StorageId.externalId(user.getId()), credential);
+		boolean success = apiClient.updateCredentials(StorageId.externalId(user.getId()), credential);
+		tracing.endSpan();
+		return success;
+	}
+
+	@Override
+	public Stream<CredentialModel> getCredentials(RealmModel realm, UserModel user) {
+		CredentialModel cm = new CredentialModel();
+		cm.setType(PasswordCredentialModel.TYPE);
+		cm.setCreatedDate(0L);
+		cm.setFederationLink(user.getFederationLink());
+		return Stream.of(cm);
 	}
 
 	@Override
@@ -102,61 +125,99 @@ public class FlintstonesUserStorageProvider implements UserStorageProvider,
 
 	@Override
 	public UserModel getUserById(RealmModel realm, String id) {
+		TracingProvider tracing = session.getProvider(TracingProvider.class);
+		tracing.startSpan(FlintstonesUserStorageProvider.class, "getUserById");
+
 		UserModel adapter = tx.findUser(id);
 		if (adapter == null) {
 			String externalId = StorageId.externalId(id);
-			FlintstoneUser user = apiClient.getUserById(externalId);
-			log.debug("Received user data for externalId <{}> from repository: {}", externalId, user);
-			if (user != null) {
-				adapter = new FlintstoneUserAdapter(session, realm, model, user);
-				tx.addUser(id, adapter);
-			}
+			adapter = findUser(realm, externalId, apiClient::getUserById);
 		} else {
 			log.debug("Found user data for {} in loadedUsers.", id);
 		}
+
+		tracing.endSpan();
+
 		return adapter;
 	}
 
 	@Override
 	public UserModel getUserByUsername(RealmModel realm, String username) {
-		return findUser(realm, username, apiClient::getUserByUsername);
+		UserModel user = tx.findUser(username);
+		if (user == null) {
+			user = findUser(realm, username, apiClient::getUserByUsername);
+		} else {
+			log.debug("Found user data for {} in loadedUsers.", username);
+		}
+		return user;
 	}
 
 	@Override
 	public UserModel getUserByEmail(RealmModel realm, String email) {
-		return findUser(realm, email, apiClient::getUserByEmail);
+		UserModel user = tx.findUser(email);
+		if (user == null) {
+			user = findUser(realm, email, apiClient::getUserByEmail);
+		} else {
+			log.debug("Found user data for {} in loadedUsers.", email);
+		}
+		return user;
 	}
 
 	private UserModel findUser(RealmModel realm, String identifier, Function<String, FlintstoneUser> fnFindUser) {
+		TracingProvider tracing = session.getProvider(TracingProvider.class);
+		tracing.startSpan(FlintstonesUserStorageProvider.class, "findUser");
+
 		UserModel adapter = null;
 		FlintstoneUser user = fnFindUser.apply(identifier);
 		log.debug("Received user data for identifier <{}> from repository: {}", identifier, user);
 		if (user != null) {
 			adapter = new FlintstoneUserAdapter(session, realm, model, user);
-			tx.addUser(adapter.getId(), adapter);
+			tx.addUser(adapter);
 		}
+
+		tracing.endSpan();
+
 		return adapter;
 	}
 
 	@Override
 	public int getUsersCount(RealmModel realm) {
-		return apiClient.usersCount();
+		return getUsersCount(realm, Map.of());
+	}
+
+	@Override
+	public int getUsersCount(RealmModel realm, Map<String, String> params) {
+		return apiClient.usersCount(params.getOrDefault(UserModel.SEARCH, null));
 	}
 
 	@Override
 	public Stream<UserModel> searchForUserStream(RealmModel realm, Map<String, String> params, Integer firstResult, Integer maxResults) {
+		TracingProvider tracing = session.getProvider(TracingProvider.class);
+		tracing.startSpan(FlintstonesUserStorageProvider.class, "searchForUserStream");
+
 		List<FlintstoneUser> result;
 		if (params.containsKey(UserModel.USERNAME)) {
-			result = List.of(apiClient.getUserByUsername(params.get(UserModel.USERNAME)));
+			result = apiClient.searchUsersByUsername(params.get(UserModel.USERNAME), firstResult, maxResults);
+		} else if (params.containsKey(UserModel.EMAIL)) {
+			result = apiClient.searchUsersByEmail(params.get(UserModel.EMAIL), firstResult, maxResults);
 		} else {
 			result = apiClient.searchUsers(params.getOrDefault(UserModel.SEARCH, null), firstResult, maxResults);
 		}
-		return result.stream().map(user -> new FlintstoneUserAdapter(session, realm, model, user));
+
+		Stream<UserModel> stream = result.stream().map(user -> new FlintstoneUserAdapter(session, realm, model, user));
+		tracing.endSpan();
+		return stream;
 	}
 
 	@Override
 	public Stream<UserModel> getGroupMembersStream(RealmModel realm, GroupModel group, Integer firstResult, Integer maxResults) {
 		return apiClient.searchGroupMembers(group.getName(), firstResult, maxResults)
+			.stream().map(user -> new FlintstoneUserAdapter(session, realm, model, user));
+	}
+
+	@Override
+	public Stream<UserModel> getRoleMembersStream(RealmModel realm, RoleModel role, Integer firstResult, Integer maxResults) {
+		return apiClient.searchRoleMembers(role.getName(), firstResult, maxResults)
 			.stream().map(user -> new FlintstoneUserAdapter(session, realm, model, user));
 	}
 
@@ -170,10 +231,12 @@ public class FlintstonesUserStorageProvider implements UserStorageProvider,
 		if (syncUsers()) {
 			FlintstoneUser flintstoneUser = new FlintstoneUser();
 			flintstoneUser.setUsername(username);
-			apiClient.createUser(flintstoneUser);
-			flintstoneUser = apiClient.getUserByUsername(username);
+			flintstoneUser = apiClient.createUser(flintstoneUser);
+			if (flintstoneUser == null) {
+				return null;
+			}
 			FlintstoneUserAdapter newUser = new FlintstoneUserAdapter(session, realm, model, flintstoneUser);
-			tx.addUser(username, newUser);
+			tx.addUser(newUser);
 			return newUser;
 		}
 		return null;
@@ -189,6 +252,14 @@ public class FlintstonesUserStorageProvider implements UserStorageProvider,
 	public void close() {
 	}
 
+	private boolean isWritable() {
+		return model.get(FlintstonesUserStorageProviderFactory.EDIT_MODE, EditMode.READ_ONLY.name()).equals(EditMode.WRITABLE.name());
+	}
+
+	private boolean importUsers() {
+		return model.get(FlintstonesUserStorageProviderFactory.USER_IMPORT, false);
+	}
+
 	private boolean syncUsers() {
 		return model.get(FlintstonesUserStorageProviderFactory.USER_CREATION_ENABLED, false);
 	}
@@ -200,7 +271,13 @@ public class FlintstonesUserStorageProvider implements UserStorageProvider,
 	private void updateUser(UserModel user) {
 		FlintstoneUserAdapter userAdapter = (FlintstoneUserAdapter) user;
 		if (userAdapter.isDirty()) {
-			apiClient.updateUser(userAdapter.getUser());
+			if (isWritable()) {
+				if (!apiClient.updateUser(userAdapter.getUser())) {
+					throw new RuntimeException("Failed to update user " + userAdapter.getUser().getUsername());
+				}
+			} else {
+				log.warn("Edit mode is read-only. Skipping update for user {}.", userAdapter.getUser().getId());
+			}
 		}
 	}
 

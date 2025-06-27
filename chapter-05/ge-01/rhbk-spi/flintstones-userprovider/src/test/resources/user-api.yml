@@ -55,6 +55,12 @@ paths:
           schema:
             type: string
             example: fred.flintstone@flintstones.com
+        - name: exactMatch
+          in: query
+          description: if username or email search should find exact or partly matches
+          schema:
+            type: boolean
+            example: true
         - name: search
           in: query
           description: case insensitive list of strings separated by whitespaces, contained (possibly partly) in username, email, first name or last name
@@ -83,7 +89,11 @@ paths:
               $ref: '#/components/schemas/User'
       responses:
         201:
-          description: User successfully created
+          description: User successfully created, returns newly created user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
         400:
           description: Invalid id supplied
         401:
@@ -96,6 +106,12 @@ paths:
       operationId: usersCount
       tags:
         - users
+      parameters:
+        - name: search
+          in: query
+          description: case insensitive list of strings separated by whitespaces, contained (possibly partly) in username, email, first name or last name
+          schema:
+            type: string
       responses:
         200:
           description: success
@@ -157,7 +173,7 @@ paths:
             schema:
               $ref: '#/components/schemas/User'
       responses:
-        201:
+        204:
           description: User successfully updated
         400:
           description: Invalid id supplied

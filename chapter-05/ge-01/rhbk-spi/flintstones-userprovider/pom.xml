@@ -12,6 +12,9 @@
 
 	<artifactId>flintstones-userprovider</artifactId>
 	<version>1.0-SNAPSHOT</version>
+	<properties>
+		<htmlunit.version>4.13.0</htmlunit.version>
+	</properties>
 
 	<dependencies>
 		<dependency>
@@ -36,7 +39,7 @@
 		</dependency>
 		<dependency>
 			<groupId>dasniko.keycloak</groupId>
-			<artifactId>keycloak-utils</artifactId>
+			<artifactId>utils</artifactId>
 			<version>${project.version}</version>
 			<scope>provided</scope>
 		</dependency>
@@ -77,10 +80,22 @@
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-reload4j</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>org.htmlunit</groupId>
+			<artifactId>htmlunit</artifactId>
+			<version>${htmlunit.version}</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
 		<finalName>${project.groupId}-${project.artifactId}</finalName>
+		<plugins>
+			<plugin>
+				<groupId>io.github.git-commit-id</groupId>
+				<artifactId>git-commit-id-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
 	</build>
 
 </project>
